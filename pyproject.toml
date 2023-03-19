@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "hesaving"
+version = "0.1.0"
+description = "Backend for home energy savings app"
+authors = ["Viswanathan Thiagarajan <viswanathan@berkeley.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.78.0"
+requests = "^2.27.1"
+uvicorn = "^0.17.6"
+joblib = "^1.1.0"
+numpy = "^1.22.4"
+psycopg2-binary = "^2.9.5"
+boto3 = "^1.26.78"
+pydantic = "^1.10.5"
+starlette = "0.19.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
