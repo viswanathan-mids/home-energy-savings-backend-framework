@@ -3,13 +3,15 @@ from pydantic import BaseModel, validator, constr
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware import Middleware
 from typing import Optional
+from datetime import datetime
 
 import joblib
 import os
 import numpy as np
 import boto3
 import psycopg2
-#import json
+import json
+import csv
 
 origins = ["https://hes-ui-ymexo7.flutterflow.app",
 ]
@@ -29,6 +31,8 @@ middleware = [
 
 #username = os.environ.get('DB_USERNAME')
 #password = os.environ.get('DB_PASSWORD')
+
+
 
 # Connect to the DB
 conn = psycopg2.connect(
@@ -61,6 +65,53 @@ class upd_device(BaseModel):
         if v not in ["U","D"]:
             raise HTTPException(status_code=422,detail="Invalid flag value not in [I,U,D]")
         return v
+
+class results(BaseModel):
+    """ Schema for results insert"""
+    scenario_id: Optional[int] = 99
+    timestamp: str
+    pv_reward: float
+    solar_action : float
+    solar_available_power : float
+    solar_actionable_power : float
+    grid_price : float
+    es_cost : float
+    es_reward : float
+    es_action : float
+    es_power_ask : float
+    es_current_storage : float
+    es_solar_power_consumed : float
+    es_grid_power_consumed : float
+    es_post_solar_power_available : float
+    es_post_grid_power_available : float
+    es_post_es_power_available : float
+    ev_cost : float
+    ev_reward : float
+    ev_action : float
+    ev_power_ask : float
+    ev_power_unserved : float
+    ev_charging_vehicle : float
+    ev_vehicle_charged : float
+    ev_post_solar_power_available : float
+    ev_post_es_power_available : float
+    ev_post_grid_power_available : float
+    ev_solar_power_consumed : float
+    ev_es_power_consumed : float
+    ev_grid_power_consumed : float
+    oth_dev_cost : float
+    oth_dev_reward : float
+    oth_dev_action : float
+    oth_dev_solar_power_consumed : float
+    oth_dev_es_power_consumed : float
+    oth_dev_grid_power_consumed : float
+    oth_dev_power_ask : float
+    oth_dev_post_solar_power_available : float
+    oth_dev_post_es_power_available : float
+    oth_dev_post_grid_power_available : float
+
+class result_dict(BaseModel):
+    """Input samples list schema"""
+    result: list[results]
 
 # get all devices
 @app.get("/device")
@@ -103,7 +154,7 @@ async def new_device(input : new_device):
     device_type = dict(input).get("device_type")   
 
     # Insert new device
-    insert_device = f"INSERT INTO device (device_name,status,device_type) VALUES \
+    insert_device = f"INSERT INTO device (device_name, status, device_type) VALUES \
         ('{device_name}','{status}','{device_type}');COMMIT;"
     
     # Execute the query and insert
@@ -114,7 +165,7 @@ async def new_device(input : new_device):
 
 # insert a new device
 @app.post("/upd_device")
-async def new_device(input : upd_device):
+async def upd_device(input : upd_device):
     device_id = dict(input).get("device_id")
     device_name = dict(input).get("device_name")
     status = dict(input).get("status")
@@ -136,3 +187,108 @@ async def new_device(input : upd_device):
     cur.execute(update_device)
    
     return {"device": job}
+
+# insert results
+@app.post("/result")
+async def results(input : result_dict):
+
+    # Select run id
+    select_runid = "SELECT MAX(run_id) FROM result"
+        
+    # Execute the query and fetch the run id
+    cur1 = conn.cursor()
+    cur1.execute(select_runid)
+    max_run = cur1.fetchone()[0]
+    
+    if max_run is None:
+        run_id = 1
+    else:
+        run_id = int(max_run) + 1       
+    
+    for row in dict(input)['result']:
+
+
+        scenario_id = dict(row).get("scenario_id")
+        timestamp = dict(row).get("timestamp")
+        pv_reward = dict(row).get("pv_reward")
+        solar_action = dict(row).get("solar_action")
+        solar_available_power = dict(row).get("solar_available_power")
+        solar_actionable_power = dict(row).get("solar_actionable_power")
+        grid_price = dict(row).get("grid_price")
+        es_cost = dict(row).get("es_cost")
+        es_reward = dict(row).get("es_reward")
+        es_action = dict(row).get("es_action")
+        es_power_ask = dict(row).get("es_power_ask")
+        es_current_storage = dict(row).get("es_current_storage")
+        es_solar_power_consumed = dict(row).get("es_solar_power_consumed")
+        es_grid_power_consumed = dict(row).get("es_grid_power_consumed")
+        es_post_solar_power_available = dict(row).get("es_post_solar_power_available")
+        es_post_grid_power_available = dict(row).get("es_post_grid_power_available")
+        es_post_es_power_available = dict(row).get("es_post_es_power_available")
+        ev_cost = dict(row).get("ev_cost")
+        ev_reward = dict(row).get("ev_reward")
+        ev_action = dict(row).get("ev_action")
+        ev_power_ask = dict(row).get("ev_power_ask")
+        ev_power_unserved = dict(row).get("ev_power_unserved")
+        ev_charging_vehicle = dict(row).get("ev_charging_vehicle")
+        ev_vehicle_charged = dict(row).get("ev_vehicle_charged")
+        ev_post_solar_power_available = dict(row).get("ev_post_solar_power_available")
+        ev_post_es_power_available = dict(row).get("ev_post_es_power_available")
+        ev_post_grid_power_available = dict(row).get("ev_post_grid_power_available")
+        ev_solar_power_consumed = dict(row).get("ev_solar_power_consumed")
+        ev_es_power_consumed = dict(row).get("ev_es_power_consumed")
+        ev_grid_power_consumed = dict(row).get("ev_grid_power_consumed")
+        oth_dev_cost = dict(row).get("oth_dev_cost")
+        oth_dev_reward = dict(row).get("oth_dev_reward")
+        oth_dev_action = dict(row).get("oth_dev_action")
+        oth_dev_solar_power_consumed = dict(row).get("oth_dev_solar_power_consumed")
+        oth_dev_es_power_consumed = dict(row).get("oth_dev_es_power_consumed")
+        oth_dev_grid_power_consumed = dict(row).get("oth_dev_grid_power_consumed")
+        oth_dev_power_ask = dict(row).get("oth_dev_power_ask")
+        oth_dev_post_solar_power_available = dict(row).get("oth_dev_post_solar_power_available")
+        oth_dev_post_es_power_available = dict(row).get("oth_dev_post_es_power_available")
+        oth_dev_post_grid_power_available = dict(row).get("oth_dev_post_grid_power_available")
+       
+        datetime_object = datetime.strptime(timestamp, '%m-%d-%Y %H:%M:%S')
+        time = datetime_object.time()
+        timestamp = datetime_object.strftime("%Y-%m-%d %H:%M:%S")
+
+        create_ts = datetime.now()
+        source = 'agent'
+
+        # Insert new results
+        insert_result = f"INSERT INTO result  \
+            (run_id, scenario_id, timestamp, time, \
+            pv_reward, solar_action, solar_available_power, solar_actionable_power, \
+            grid_price, es_cost, es_reward, es_action, es_power_ask, \
+            es_current_storage, es_solar_power_consumed, es_grid_power_consumed, \
+            es_post_solar_power_available, es_post_grid_power_available, \
+            es_post_es_power_available, ev_cost, ev_reward, ev_action, \
+            ev_power_ask, ev_power_unserved, ev_charging_vehicle, ev_vehicle_charged, \
+            ev_post_solar_power_available, ev_post_es_power_available, \
+            ev_post_grid_power_available, ev_solar_power_consumed, \
+            ev_es_power_consumed, ev_grid_power_consumed, oth_dev_cost, \
+            oth_dev_reward, oth_dev_action, oth_dev_solar_power_consumed, \
+            oth_dev_es_power_consumed, oth_dev_grid_power_consumed, oth_dev_power_ask, \
+            oth_dev_post_solar_power_available, oth_dev_post_es_power_available, \
+            oth_dev_post_grid_power_available, create_ts, source) VALUES \
+            ('{run_id}','{scenario_id}','{timestamp}','{time}', \
+            '{pv_reward}', '{solar_action}', '{solar_available_power}', '{solar_actionable_power}', \
+            '{grid_price}', '{es_cost}', '{es_reward}', '{es_action}', '{es_power_ask}', \
+            '{es_current_storage}', '{es_solar_power_consumed}', '{es_grid_power_consumed}', \
+            '{es_post_solar_power_available}', '{es_post_grid_power_available}', \
+            '{es_post_es_power_available}', '{ev_cost}', '{ev_reward}', '{ev_action}', \
+            '{ev_power_ask}', '{ev_power_unserved}', '{ev_charging_vehicle}', '{ev_vehicle_charged}', \
+            '{ev_post_solar_power_available}', '{ev_post_es_power_available}', \
+            '{ev_post_grid_power_available}', '{ev_solar_power_consumed}', \
+            '{ev_es_power_consumed}', '{ev_grid_power_consumed}', '{oth_dev_cost}', \
+            '{oth_dev_reward}', '{oth_dev_action}', '{oth_dev_solar_power_consumed}', \
+            '{oth_dev_es_power_consumed}', '{oth_dev_grid_power_consumed}', '{oth_dev_power_ask}', \
+            '{oth_dev_post_solar_power_available}', '{oth_dev_post_es_power_available}', \
+            '{oth_dev_post_grid_power_available}','{create_ts}', '{source}');COMMIT;"
+        
+        # Execute the query and insert
+        cur2 = conn.cursor()
+        cur2.execute(insert_result)
+   
+    return {"result": "inserted"}
