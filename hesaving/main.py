@@ -3,7 +3,7 @@ from pydantic import BaseModel, validator, constr
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware import Middleware
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, time
 
 import joblib
 import os
@@ -31,7 +31,6 @@ middleware = [
 
 #username = os.environ.get('DB_USERNAME')
 #password = os.environ.get('DB_PASSWORD')
-
 
 
 # Connect to the DB
@@ -292,3 +291,60 @@ async def results(input : result_dict):
         cur2.execute(insert_result)
    
     return {"result": "inserted"}
+
+
+# get costs
+@app.get("/costs")
+async def get_costs(scenario : str, source: str):
+    
+    scenario = int(scenario)
+    # Select max run_id for the scenario
+    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' "
+    
+    # Execute the query and fetch the results
+    cur1 = conn.cursor()
+    cur1.execute(select_runid)
+    run_id = cur1.fetchone()[0]
+
+    # Execute query depending on source
+
+    if source in {"naive","rule"}:
+        # Execute the query and fetch the costs
+        select_costs = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
+            FROM result WHERE scenario_id = '{scenario}' and source = '{source}' and run_id in (6,7)"
+    elif source == "agent":
+        select_costs = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
+            FROM result WHERE run_id = '{run_id}'"
+    else:
+        raise HTTPException (422, "source not recognized")
+
+    # Execute the query and fetch the results
+    cur2 = conn.cursor()
+    cur2.execute(select_costs)
+    costs = cur2.fetchall()
+
+    
+    # def json_serial(obj):
+    #     """JSON serializer for objects not serializable by default json"""
+
+    #     if isinstance(obj, (datetime, time)):
+    #         return obj.isoformat()
+    #     raise TypeError ("Type %s not serializable" % type(obj))
+
+    # Format Costs
+    # like {"costs":{{"time":"06:00"{"es_cost":0.256,"ev_cost": 0.351,"hv_cost":0.110,"totcost":xx},
+    #               {"time":"06:05"{"es_cost":0.356,"ev_cost": 0.0,"hv_cost":0.110,"tot_cost":xx},...}}
+    
+    time = [i[0] for i in costs]
+    es_cost = [i[1] for i in costs]
+    ev_cost = [i[2] for i in costs]
+    hv_cost = [i[3] for i in costs]
+    tot_cost = [i[1]+i[2]+i[3] for i in costs]
+
+    keys = ["time","es_cost","ev_cost","hv_cost","tot_cost"]
+    items = [dict(zip(keys, [t, s, v, h, c])) for t, s, v, h, c in zip(time, es_cost, ev_cost , hv_cost, tot_cost)]
+    
+    #output = {"costs": json.dumps(costs, default=json_serial)}
+    
+    # Format the results and return them through the API
+    return {"costs": items }
