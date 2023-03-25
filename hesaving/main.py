@@ -32,7 +32,6 @@ middleware = [
 #username = os.environ.get('DB_USERNAME')
 #password = os.environ.get('DB_PASSWORD')
 
-
 # Connect to the DB
 conn = psycopg2.connect(
     host="hes-db.cuojxnjfrbc7.us-east-1.rds.amazonaws.com",
@@ -312,7 +311,7 @@ async def get_costs(scenario : str, source: str, interval : str):
         # Execute query depending on source
         if source in {"naive","rule"}:
             # Execute the query and fetch the costs
-            select_costs = f"SELECT  time, es_cost, ev_cost,oth_dev_cost  \
+            select_costs = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
                 FROM result WHERE scenario_id = '{scenario}' and source = '{source}' and run_id in (6,7)"
         elif source == "agent":
             select_costs = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
@@ -347,6 +346,7 @@ async def get_costs(scenario : str, source: str, interval : str):
         items = [dict(zip(keys, [t, s, v, h, c])) for t, s, v, h, c in zip(time, es_cost, ev_cost , hv_cost, tot_cost)]
         
         #output = {"costs": json.dumps(costs, default=json_serial)}
+
     elif interval == "hour":
         # Execute query depending on source
         if source in {"naive","rule"}:
@@ -374,7 +374,7 @@ async def get_costs(scenario : str, source: str, interval : str):
         #     raise TypeError ("Type %s not serializable" % type(obj))
 
         # Format Costs
-        # like {"costs":{{"time":"06:00"{"es_cost":0.256,"ev_cost": 0.351,"hv_cost":0.110,"totcost":xx},
+        # like {"costs":{{"time":"06:00"{"es_cost":0.256,"ev_cost": 0.351,"hv_cost":0.110,"tot_cost":xx},
         #               {"time":"06:05"{"es_cost":0.356,"ev_cost": 0.0,"hv_cost":0.110,"tot_cost":xx},...}}
         
         time = [i[0] for i in costs]
@@ -393,3 +393,115 @@ async def get_costs(scenario : str, source: str, interval : str):
             raise HTTPException (422, "interval not recognized")
 
     return {"costs": items }
+
+
+    # get energy consumption
+@app.get("/energy")
+async def get_energy(scenario : str, source: str, interval : str):
+    
+    scenario = int(scenario)
+    # Select max run_id for the scenario
+    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' "
+    
+    # Execute the query and fetch the results
+    cur1 = conn.cursor()
+    cur1.execute(select_runid)
+    run_id = cur1.fetchone()[0]
+
+    # Energy grouping based on interval request
+
+    if interval == "fivemins":
+        # Execute query depending on source
+        if source in {"naive","rule"}:
+            # Execute the query and fetch the energy consumption
+            select_energy = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
+                (ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+                (oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+                FROM result WHERE scenario_id = '{scenario}' and source = '{source}' and run_id in (6,7)"
+        elif source == "agent":
+            select_energy = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
+                (ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+                (oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+                FROM result WHERE run_id = '{run_id}'"
+        else:
+            raise HTTPException (422, "source not recognized")
+
+        # Execute the query and fetch the results
+        cur2 = conn.cursor()
+        cur2.execute(select_energy)
+        energy = cur2.fetchall()
+
+        
+        # def json_serial(obj):
+        #     """JSON serializer for objects not serializable by default json"""
+
+        #     if isinstance(obj, (datetime, time)):
+        #         return obj.isoformat()
+        #     raise TypeError ("Type %s not serializable" % type(obj))
+
+        # Format Energy consumption
+        # like {"energy":{{"time":"06:00"{"batt_ene":0.256,"ev_ene": 0.351,"hv_ene":0.110,"tot_ene":xx},
+        #               {"time":"06:05"{"es_ene":0.356,"ev_ene": 0.0,"hv_ene":0.110,"tot_ene":xx},...}}
+        
+        time = [i[0] for i in energy]
+        batt_ene = [i[1] for i in energy]
+        ev_ene = [i[2] for i in energy]
+        hv_ene = [i[3] for i in energy]
+        tot_ene = [i[1]+i[2]+i[3] for i in energy]
+
+        keys = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        items = [dict(zip(keys, [t, s, v, h, c])) for t, s, v, h, c in zip(time, batt_ene, ev_ene , hv_ene, tot_ene)]
+        
+        #output = {"energy": json.dumps(energy, default=json_serial)}
+
+    elif interval == "hour":
+        # Execute query depending on source
+        if source in {"naive","rule"}:
+            # Execute the query and fetch the energy consumption
+            select_energy = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
+                sum(ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+                sum(oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+                FROM result WHERE scenario_id = '{scenario}' and source = '{source}' and run_id in (6,7) \
+                group by extract(hour from time)"
+        elif source == "agent":
+            select_energy = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
+                sum(ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+                sum(oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+                FROM result WHERE run_id = '{run_id}' \
+                group by extract(hour from time)"
+        else:
+            raise HTTPException (422, "source not recognized")
+
+        # Execute the query and fetch the results
+        cur2 = conn.cursor()
+        cur2.execute(select_energy)
+        energy = cur2.fetchall()
+
+        
+        # def json_serial(obj):
+        #     """JSON serializer for objects not serializable by default json"""
+
+        #     if isinstance(obj, (datetime, time)):
+        #         return obj.isoformat()
+        #     raise TypeError ("Type %s not serializable" % type(obj))
+
+        # Format energy consumption
+        # like {"energy":{{"time":"06:00"{"batt_ene":0.256,"ev_ene": 0.351,"hv_ene":0.110,"tot_ene":xx},
+        #               {"time":"06:05"{"es_ene":0.356,"ev_ene": 0.0,"hv_ene":0.110,"tot_ene":xx},...}}
+        
+        time = [i[0] for i in energy]
+        batt_ene = [i[1] for i in energy]
+        ev_ene = [i[2] for i in energy]
+        hv_ene = [i[3] for i in energy]
+        tot_ene = [i[1]+i[2]+i[3] for i in energy]
+
+        keys = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        items = [dict(zip(keys, [t, s, v, h, c])) for t, s, v, h, c in zip(time, batt_ene, ev_ene , hv_ene, tot_ene)]
+        
+        #output = {"energy": json.dumps(energy, default=json_serial)}
+    
+    # Format the results and return them through the API
+    else:
+            raise HTTPException (422, "interval not recognized")
+
+    return {"energy_consumption": items }
