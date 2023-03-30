@@ -32,6 +32,8 @@ middleware = [
 #username = os.environ.get('DB_USERNAME')
 #password = os.environ.get('DB_PASSWORD')
 
+
+
 # Connect to the DB
 conn = psycopg2.connect(
     host="hes-db.cuojxnjfrbc7.us-east-1.rds.amazonaws.com",
@@ -116,7 +118,7 @@ class result_dict(BaseModel):
 def get_device():
     
     # Select Devices
-    select_devices = "SELECT * FROM device"
+    select_devices = "SELECT * FROM device order by device_id desc"
     
     # Execute the query and fetch the results
     cur = conn.cursor()
@@ -294,7 +296,7 @@ async def results(input : result_dict):
 
 # get costs
 @app.get("/costs")
-async def get_costs(scenario : str, source: str, interval : str):
+async def get_costs(scenario : str, interval : str):
     
     scenario = int(scenario)
     # Select max run_id for the scenario
@@ -309,21 +311,30 @@ async def get_costs(scenario : str, source: str, interval : str):
 
     if interval == "fivemins":
         # Execute query depending on source
-        if source in {"naive","rule"}:
-            # Execute the query and fetch the costs
-            select_costs = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
-                FROM result WHERE scenario_id = '{scenario}' and source = '{source}' and run_id in (6,7)"
-        elif source == "agent":
-            select_costs = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
+        
+        # Execute the query and fetch the costs for each source
+        select_costs_rule = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
+                FROM result WHERE scenario_id = '{scenario}' and source = 'rule' and run_id in (6,7)"
+        
+        select_costs_naive = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
+                FROM result WHERE scenario_id = '{scenario}' and source = 'naive' and run_id in (6,7)"
+        
+        select_costs_agent = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
                 FROM result WHERE run_id = '{run_id}'"
-        else:
-            raise HTTPException (422, "source not recognized")
+        
 
         # Execute the query and fetch the results
-        cur2 = conn.cursor()
-        cur2.execute(select_costs)
-        costs = cur2.fetchall()
+        cur_n = conn.cursor()
+        cur_n.execute(select_costs_naive)
+        costs_n = cur_n.fetchall()
 
+        cur_r = conn.cursor()
+        cur_r.execute(select_costs_rule)
+        costs_r = cur_r.fetchall()
+
+        cur_a = conn.cursor()
+        cur_a.execute(select_costs_agent)
+        costs_a = cur_a.fetchall()
         
         # def json_serial(obj):
         #     """JSON serializer for objects not serializable by default json"""
@@ -332,39 +343,68 @@ async def get_costs(scenario : str, source: str, interval : str):
         #         return obj.isoformat()
         #     raise TypeError ("Type %s not serializable" % type(obj))
 
-        # Format Costs
-        # like {"costs":{{"time":"06:00"{"es_cost":0.256,"ev_cost": 0.351,"hv_cost":0.110,"totcost":xx},
-        #               {"time":"06:05"{"es_cost":0.356,"ev_cost": 0.0,"hv_cost":0.110,"tot_cost":xx},...}}
+        # Format Costs for each source
+        # like {"costs":{"agent":[{"time":"06:00"{"es_cost":0.256,"ev_cost": 0.351,"hv_cost":0.110,"totcost":xx},
+        #               {"time":"06:05"{"es_cost":0.356,"ev_cost": 0.0,"hv_cost":0.110,"tot_cost":xx},...}],
+        #                "rule":[...],"naive":[...]}}
         
-        time = [i[0] for i in costs]
-        es_cost = [i[1] for i in costs]
-        ev_cost = [i[2] for i in costs]
-        hv_cost = [i[3] for i in costs]
-        tot_cost = [i[1]+i[2]+i[3] for i in costs]
+        time_a = [i[0] for i in costs_a]
+        es_cost_a = [i[1] for i in costs_a]
+        ev_cost_a = [i[2] for i in costs_a]
+        hv_cost_a = [i[3] for i in costs_a]
+        tot_cost_a = [i[1]+i[2]+i[3] for i in costs_a]
 
-        keys = ["time","es_cost","ev_cost","hv_cost","tot_cost"]
-        items = [dict(zip(keys, [t, s, v, h, c])) for t, s, v, h, c in zip(time, es_cost, ev_cost , hv_cost, tot_cost)]
+        keys_a = ["time","es_cost","ev_cost","hv_cost","tot_cost"]
+        items_a = [dict(zip(keys_a, [t, s, v, h, c])) for t, s, v, h, c in zip(time_a, es_cost_a, ev_cost_a , hv_cost_a, tot_cost_a)]
         
+        time_r = [i[0] for i in costs_r]
+        es_cost_r = [i[1] for i in costs_r]
+        ev_cost_r = [i[2] for i in costs_r]
+        hv_cost_r = [i[3] for i in costs_r]
+        tot_cost_r = [i[1]+i[2]+i[3] for i in costs_r]
+
+        keys_r = ["time","es_cost","ev_cost","hv_cost","tot_cost"]
+        items_r = [dict(zip(keys_r, [t, s, v, h, c])) for t, s, v, h, c in zip(time_r, es_cost_r, ev_cost_r , hv_cost_r, tot_cost_r)]
+
+        time_n = [i[0] for i in costs_n]
+        es_cost_n = [i[1] for i in costs_n]
+        ev_cost_n = [i[2] for i in costs_n]
+        hv_cost_n = [i[3] for i in costs_n]
+        tot_cost_n = [i[1]+i[2]+i[3] for i in costs_n]
+
+        keys_n = ["time","es_cost","ev_cost","hv_cost","tot_cost"]
+        items_n = [dict(zip(keys_n, [t, s, v, h, c])) for t, s, v, h, c in zip(time_n, es_cost_n, ev_cost_n , hv_cost_n, tot_cost_n)]
+
+
         #output = {"costs": json.dumps(costs, default=json_serial)}
 
     elif interval == "hour":
         # Execute query depending on source
-        if source in {"naive","rule"}:
+        
             # Execute the query and fetch the costs
-            select_costs = f"SELECT  extract(hour from time) as time, sum (es_cost::float) as es_cost, sum(ev_cost::float) as ev_cost \
-            , sum(oth_dev_cost::float) as oth_dev_cost FROM result WHERE scenario_id = '{scenario}' and source = '{source}' and run_id in (6,7) \
+        select_costs_naive = f"SELECT  extract(hour from time) as time, sum (es_cost::float) as es_cost, sum(ev_cost::float) as ev_cost \
+            , sum(oth_dev_cost::float) as oth_dev_cost FROM result WHERE scenario_id = '{scenario}' and source = 'naive' and run_id in (6,7) \
             group by extract(hour from time)"
-        elif source == "agent":
-            select_costs = f"SELECT  extract(hour from time) as time, sum (es_cost::float) as es_cost, sum(ev_cost::float) as ev_cost \
+        
+        select_costs_rule = f"SELECT  extract(hour from time) as time, sum (es_cost::float) as es_cost, sum(ev_cost::float) as ev_cost \
+            , sum(oth_dev_cost::float) as oth_dev_cost FROM result WHERE scenario_id = '{scenario}' and source = 'rule' and run_id in (6,7) \
+            group by extract(hour from time)"
+        
+        select_costs_agent = f"SELECT  extract(hour from time) as time, sum (es_cost::float) as es_cost, sum(ev_cost::float) as ev_cost \
                 , sum(oth_dev_cost::float) as oth_dev_cost FROM result WHERE run_id = '{run_id}' group by extract(hour from time)"
-        else:
-            raise HTTPException (422, "source not recognized")
-
+        
         # Execute the query and fetch the results
-        cur2 = conn.cursor()
-        cur2.execute(select_costs)
-        costs = cur2.fetchall()
+        cur_n = conn.cursor()
+        cur_n.execute(select_costs_naive)
+        costs_n = cur_n.fetchall()
 
+        cur_r = conn.cursor()
+        cur_r.execute(select_costs_rule)
+        costs_r = cur_r.fetchall()
+
+        cur_a = conn.cursor()
+        cur_a.execute(select_costs_agent)
+        costs_a = cur_a.fetchall()
         
         # def json_serial(obj):
         #     """JSON serializer for objects not serializable by default json"""
@@ -373,31 +413,51 @@ async def get_costs(scenario : str, source: str, interval : str):
         #         return obj.isoformat()
         #     raise TypeError ("Type %s not serializable" % type(obj))
 
-        # Format Costs
-        # like {"costs":{{"time":"06:00"{"es_cost":0.256,"ev_cost": 0.351,"hv_cost":0.110,"tot_cost":xx},
-        #               {"time":"06:05"{"es_cost":0.356,"ev_cost": 0.0,"hv_cost":0.110,"tot_cost":xx},...}}
+        # Format Costs for each source
+        # like {"costs":{"agent":[{"time":"06:00"{"es_cost":0.256,"ev_cost": 0.351,"hv_cost":0.110,"totcost":xx},
+        #               {"time":"06:05"{"es_cost":0.356,"ev_cost": 0.0,"hv_cost":0.110,"tot_cost":xx},...}],
+        #                "rule":[...],"naive":[...]}}
         
-        time = [i[0] for i in costs]
-        es_cost = [i[1] for i in costs]
-        ev_cost = [i[2] for i in costs]
-        hv_cost = [i[3] for i in costs]
-        tot_cost = [i[1]+i[2]+i[3] for i in costs]
+        time_a = [i[0] for i in costs_a]
+        es_cost_a = [i[1] for i in costs_a]
+        ev_cost_a = [i[2] for i in costs_a]
+        hv_cost_a = [i[3] for i in costs_a]
+        tot_cost_a = [i[1]+i[2]+i[3] for i in costs_a]
 
-        keys = ["time","es_cost","ev_cost","hv_cost","tot_cost"]
-        items = [dict(zip(keys, [t, s, v, h, c])) for t, s, v, h, c in zip(time, es_cost, ev_cost , hv_cost, tot_cost)]
+        keys_a = ["time","es_cost","ev_cost","hv_cost","tot_cost"]
+        items_a = [dict(zip(keys_a, [t, s, v, h, c])) for t, s, v, h, c in zip(time_a, es_cost_a, ev_cost_a , hv_cost_a, tot_cost_a)]
         
+        time_r = [i[0] for i in costs_r]
+        es_cost_r = [i[1] for i in costs_r]
+        ev_cost_r = [i[2] for i in costs_r]
+        hv_cost_r = [i[3] for i in costs_r]
+        tot_cost_r = [i[1]+i[2]+i[3] for i in costs_r]
+
+        keys_r = ["time","es_cost","ev_cost","hv_cost","tot_cost"]
+        items_r = [dict(zip(keys_r, [t, s, v, h, c])) for t, s, v, h, c in zip(time_r, es_cost_r, ev_cost_r , hv_cost_r, tot_cost_r)]
+
+        time_n = [i[0] for i in costs_n]
+        es_cost_n = [i[1] for i in costs_n]
+        ev_cost_n = [i[2] for i in costs_n]
+        hv_cost_n = [i[3] for i in costs_n]
+        tot_cost_n = [i[1]+i[2]+i[3] for i in costs_n]
+
+        keys_n = ["time","es_cost","ev_cost","hv_cost","tot_cost"]
+        items_n = [dict(zip(keys_n, [t, s, v, h, c])) for t, s, v, h, c in zip(time_n, es_cost_n, ev_cost_n , hv_cost_n, tot_cost_n)]
+
+
         #output = {"costs": json.dumps(costs, default=json_serial)}
     
     # Format the results and return them through the API
     else:
             raise HTTPException (422, "interval not recognized")
 
-    return {"costs": items }
+    return {"costs": {"agent":items_a, "rule":items_r, "naive":items_n }}
 
 
     # get energy consumption
 @app.get("/energy")
-async def get_energy(scenario : str, source: str, interval : str):
+async def get_energy(scenario : str, interval : str):
     
     scenario = int(scenario)
     # Select max run_id for the scenario
@@ -412,24 +472,34 @@ async def get_energy(scenario : str, source: str, interval : str):
 
     if interval == "fivemins":
         # Execute query depending on source
-        if source in {"naive","rule"}:
-            # Execute the query and fetch the energy consumption
-            select_energy = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
+        # Execute the query and fetch the energy consumption
+        select_energy_n = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
                 (ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
                 (oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
-                FROM result WHERE scenario_id = '{scenario}' and source = '{source}' and run_id in (6,7)"
-        elif source == "agent":
-            select_energy = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
+                FROM result WHERE scenario_id = '{scenario}' and source = 'naive' and run_id in (6,7)"
+
+        select_energy_r = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
+                (ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+                (oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+                FROM result WHERE scenario_id = '{scenario}' and source = 'rule' and run_id in (6,7)"
+        
+        select_energy_a = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
                 (ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
                 (oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
                 FROM result WHERE run_id = '{run_id}'"
-        else:
-            raise HTTPException (422, "source not recognized")
-
+        
         # Execute the query and fetch the results
-        cur2 = conn.cursor()
-        cur2.execute(select_energy)
-        energy = cur2.fetchall()
+        cur_n = conn.cursor()
+        cur_n.execute(select_energy_n)
+        energy_n = cur_n.fetchall()
+
+        cur_r = conn.cursor()
+        cur_r.execute(select_energy_r)
+        energy_r = cur_r.fetchall()
+
+        cur_a = conn.cursor()
+        cur_a.execute(select_energy_a)
+        energy_a = cur_a.fetchall()
 
         
         # def json_serial(obj):
@@ -440,42 +510,73 @@ async def get_energy(scenario : str, source: str, interval : str):
         #     raise TypeError ("Type %s not serializable" % type(obj))
 
         # Format Energy consumption
-        # like {"energy":{{"time":"06:00"{"batt_ene":0.256,"ev_ene": 0.351,"hv_ene":0.110,"tot_ene":xx},
-        #               {"time":"06:05"{"es_ene":0.356,"ev_ene": 0.0,"hv_ene":0.110,"tot_ene":xx},...}}
+        # like {"energy":{"agent":[{"time":"06:00"{"batt_ene":0.256,"ev_ene": 0.351,"hv_ene":0.110,"tot_ene":xx},
+        #               {"time":"06:05"{"es_ene":0.356,"ev_ene": 0.0,"hv_ene":0.110,"tot_ene":xx},...}],
+        #               {"rule": [...], "naive":[...]}}
         
-        time = [i[0] for i in energy]
-        batt_ene = [i[1] for i in energy]
-        ev_ene = [i[2] for i in energy]
-        hv_ene = [i[3] for i in energy]
-        tot_ene = [i[1]+i[2]+i[3] for i in energy]
+        time_n = [i[0] for i in energy_n]
+        batt_ene_n = [i[1] for i in energy_n]
+        ev_ene_n = [i[2] for i in energy_n]
+        hv_ene_n = [i[3] for i in energy_n]
+        tot_ene_n = [i[1]+i[2]+i[3] for i in energy_n]
 
-        keys = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
-        items = [dict(zip(keys, [t, s, v, h, c])) for t, s, v, h, c in zip(time, batt_ene, ev_ene , hv_ene, tot_ene)]
+        keys_n = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        items_n = [dict(zip(keys_n, [t, s, v, h, c])) for t, s, v, h, c in zip(time_n, batt_ene_n, ev_ene_n , hv_ene_n, tot_ene_n)]
+
+        time_r = [i[0] for i in energy_r]
+        batt_ene_r = [i[1] for i in energy_r]
+        ev_ene_r = [i[2] for i in energy_r]
+        hv_ene_r = [i[3] for i in energy_r]
+        tot_ene_r = [i[1]+i[2]+i[3] for i in energy_r]
+
+        keys_r = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        items_r = [dict(zip(keys_r, [t, s, v, h, c])) for t, s, v, h, c in zip(time_r, batt_ene_r, ev_ene_r , hv_ene_r, tot_ene_r)]
+
+        time_a = [i[0] for i in energy_a]
+        batt_ene_a = [i[1] for i in energy_a]
+        ev_ene_a = [i[2] for i in energy_a]
+        hv_ene_a = [i[3] for i in energy_a]
+        tot_ene_a = [i[1]+i[2]+i[3] for i in energy_a]
+
+        keys_a = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        items_a = [dict(zip(keys_a, [t, s, v, h, c])) for t, s, v, h, c in zip(time_a, batt_ene_a, ev_ene_a , hv_ene_a, tot_ene_a)]
         
         #output = {"energy": json.dumps(energy, default=json_serial)}
 
     elif interval == "hour":
         # Execute query depending on source
-        if source in {"naive","rule"}:
-            # Execute the query and fetch the energy consumption
-            select_energy = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
+        
+        # Execute the query and fetch the energy consumption
+        select_energy_n = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
                 sum(ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
                 sum(oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
-                FROM result WHERE scenario_id = '{scenario}' and source = '{source}' and run_id in (6,7) \
+                FROM result WHERE scenario_id = '{scenario}' and source = 'naive' and run_id in (6,7) \
                 group by extract(hour from time)"
-        elif source == "agent":
-            select_energy = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
+        
+        select_energy_r = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
+                sum(ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+                sum(oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+                FROM result WHERE scenario_id = '{scenario}' and source = 'rule' and run_id in (6,7) \
+                group by extract(hour from time)"
+        
+        select_energy_a = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
                 sum(ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
                 sum(oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
                 FROM result WHERE run_id = '{run_id}' \
                 group by extract(hour from time)"
-        else:
-            raise HTTPException (422, "source not recognized")
-
+        
         # Execute the query and fetch the results
-        cur2 = conn.cursor()
-        cur2.execute(select_energy)
-        energy = cur2.fetchall()
+        cur_n = conn.cursor()
+        cur_n.execute(select_energy_n)
+        energy_n = cur_n.fetchall()
+
+        cur_r = conn.cursor()
+        cur_r.execute(select_energy_r)
+        energy_r = cur_r.fetchall()
+
+        cur_a = conn.cursor()
+        cur_a.execute(select_energy_a)
+        energy_a = cur_a.fetchall()
 
         
         # def json_serial(obj):
@@ -485,18 +586,37 @@ async def get_energy(scenario : str, source: str, interval : str):
         #         return obj.isoformat()
         #     raise TypeError ("Type %s not serializable" % type(obj))
 
-        # Format energy consumption
-        # like {"energy":{{"time":"06:00"{"batt_ene":0.256,"ev_ene": 0.351,"hv_ene":0.110,"tot_ene":xx},
-        #               {"time":"06:05"{"es_ene":0.356,"ev_ene": 0.0,"hv_ene":0.110,"tot_ene":xx},...}}
+        # Format Energy consumption
+        # like {"energy":{"agent":[{"time":"06:00"{"batt_ene":0.256,"ev_ene": 0.351,"hv_ene":0.110,"tot_ene":xx},
+        #               {"time":"06:05"{"es_ene":0.356,"ev_ene": 0.0,"hv_ene":0.110,"tot_ene":xx},...}],
+        #               {"rule": [...], "naive":[...]}}
         
-        time = [i[0] for i in energy]
-        batt_ene = [i[1] for i in energy]
-        ev_ene = [i[2] for i in energy]
-        hv_ene = [i[3] for i in energy]
-        tot_ene = [i[1]+i[2]+i[3] for i in energy]
+        time_n = [i[0] for i in energy_n]
+        batt_ene_n = [i[1] for i in energy_n]
+        ev_ene_n = [i[2] for i in energy_n]
+        hv_ene_n = [i[3] for i in energy_n]
+        tot_ene_n = [i[1]+i[2]+i[3] for i in energy_n]
 
-        keys = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
-        items = [dict(zip(keys, [t, s, v, h, c])) for t, s, v, h, c in zip(time, batt_ene, ev_ene , hv_ene, tot_ene)]
+        keys_n = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        items_n = [dict(zip(keys_n, [t, s, v, h, c])) for t, s, v, h, c in zip(time_n, batt_ene_n, ev_ene_n , hv_ene_n, tot_ene_n)]
+
+        time_r = [i[0] for i in energy_r]
+        batt_ene_r = [i[1] for i in energy_r]
+        ev_ene_r = [i[2] for i in energy_r]
+        hv_ene_r = [i[3] for i in energy_r]
+        tot_ene_r = [i[1]+i[2]+i[3] for i in energy_r]
+
+        keys_r = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        items_r = [dict(zip(keys_r, [t, s, v, h, c])) for t, s, v, h, c in zip(time_r, batt_ene_r, ev_ene_r , hv_ene_r, tot_ene_r)]
+
+        time_a = [i[0] for i in energy_a]
+        batt_ene_a = [i[1] for i in energy_a]
+        ev_ene_a = [i[2] for i in energy_a]
+        hv_ene_a = [i[3] for i in energy_a]
+        tot_ene_a = [i[1]+i[2]+i[3] for i in energy_a]
+
+        keys_a = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        items_a = [dict(zip(keys_a, [t, s, v, h, c])) for t, s, v, h, c in zip(time_a, batt_ene_a, ev_ene_a , hv_ene_a, tot_ene_a)]
         
         #output = {"energy": json.dumps(energy, default=json_serial)}
     
@@ -504,4 +624,4 @@ async def get_energy(scenario : str, source: str, interval : str):
     else:
             raise HTTPException (422, "interval not recognized")
 
-    return {"energy_consumption": items }
+    return {"energy_consumption": {"agent":items_a, "naive":items_n, "rule":items_r }}
