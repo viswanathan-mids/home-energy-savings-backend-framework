@@ -300,12 +300,24 @@ async def get_costs(scenario : str, interval : str):
     
     scenario = int(scenario)
     # Select max run_id for the scenario
-    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' "
+    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' and source = 'agent'"
+
+    select_runid_r = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' and source = 'rule'"
+
+    select_runid_n = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' and source = 'naive'"
     
     # Execute the query and fetch the results
     cur1 = conn.cursor()
     cur1.execute(select_runid)
     run_id = cur1.fetchone()[0]
+
+    curr = conn.cursor()
+    curr.execute(select_runid_r)
+    run_id_r = curr.fetchone()[0]
+
+    curn = conn.cursor()
+    curn.execute(select_runid_n)
+    run_id_n = curn.fetchone()[0]
 
     # Cost grouping based on interval request
 
@@ -314,10 +326,10 @@ async def get_costs(scenario : str, interval : str):
         
         # Execute the query and fetch the costs for each source
         select_costs_rule = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
-                FROM result WHERE scenario_id = '{scenario}' and source = 'rule' and run_id in (6,7)"
+                FROM result WHERE run_id = '{run_id_r}'"
         
         select_costs_naive = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
-                FROM result WHERE scenario_id = '{scenario}' and source = 'naive' and run_id in (6,7)"
+                FROM result WHERE run_id = '{run_id_n}'"
         
         select_costs_agent = f"SELECT  time::char(5), es_cost, ev_cost,oth_dev_cost  \
                 FROM result WHERE run_id = '{run_id}'"
@@ -383,11 +395,11 @@ async def get_costs(scenario : str, interval : str):
         
             # Execute the query and fetch the costs
         select_costs_naive = f"SELECT  extract(hour from time) as time, sum (es_cost::float) as es_cost, sum(ev_cost::float) as ev_cost \
-            , sum(oth_dev_cost::float) as oth_dev_cost FROM result WHERE scenario_id = '{scenario}' and source = 'naive' and run_id in (6,7) \
+            , sum(oth_dev_cost::float) as oth_dev_cost FROM result WHERE run_id = '{run_id_n}' \
             group by extract(hour from time)"
         
         select_costs_rule = f"SELECT  extract(hour from time) as time, sum (es_cost::float) as es_cost, sum(ev_cost::float) as ev_cost \
-            , sum(oth_dev_cost::float) as oth_dev_cost FROM result WHERE scenario_id = '{scenario}' and source = 'rule' and run_id in (6,7) \
+            , sum(oth_dev_cost::float) as oth_dev_cost FROM result WHERE run_id = '{run_id_r}' \
             group by extract(hour from time)"
         
         select_costs_agent = f"SELECT  extract(hour from time) as time, sum (es_cost::float) as es_cost, sum(ev_cost::float) as ev_cost \
@@ -455,7 +467,7 @@ async def get_costs(scenario : str, interval : str):
     return {"costs": {"agent":items_a, "rule":items_r, "naive":items_n }}
 
 
-    # get energy consumption
+# get energy consumption
 @app.get("/energy")
 async def get_energy(scenario : str, interval : str):
     
