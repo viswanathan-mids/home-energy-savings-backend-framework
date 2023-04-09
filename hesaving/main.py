@@ -468,7 +468,7 @@ async def get_costs(scenario : str, interval : str):
 
 
 # get energy consumption
-@app.get("/energy")
+@app.get("/energy_old")
 async def get_energy(scenario : str, interval : str):
     
     scenario = int(scenario)
@@ -637,3 +637,189 @@ async def get_energy(scenario : str, interval : str):
             raise HTTPException (422, "interval not recognized")
 
     return {"energy_consumption": {"agent":items_a, "naive":items_n, "rule":items_r }}
+
+# get energy consumption
+@app.get("/energy")
+async def get_energy(scenario : str, interval : str):
+    
+    scenario = int(scenario)
+    # Select max run_id for the scenario
+    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' and source = 'agent'"
+    
+    # Execute the query and fetch the results
+    cur1 = conn.cursor()
+    cur1.execute(select_runid)
+    run_id = cur1.fetchone()[0]
+
+    # Energy grouping based on interval request
+
+    if interval == "fivemins":
+        # Execute query depending on source
+        # Execute the query and fetch the energy consumption
+        # select_energy_n = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
+        #         (ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+        #         (oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+        #         FROM result WHERE scenario_id = '{scenario}' and source = 'naive' and run_id in (6,7)"
+
+        # select_energy_r = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
+        #         (ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+        #         (oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+        #         FROM result WHERE scenario_id = '{scenario}' and source = 'rule' and run_id in (6,7)"
+        
+        select_energy_a = f"SELECT  time::char(5), (es_solar_power_consumed + es_grid_power_consumed) as batt,  \
+                (ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+                (oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv, \
+                -(48 - oth_dev_post_grid_power_available) as grid, \
+                -(solar_actionable_power - oth_dev_post_solar_power_available) as solar,   \
+                -(es_post_es_power_available - oth_dev_post_es_power_available) as batt    \
+                FROM result WHERE run_id = '{run_id}'"
+        
+        # Execute the query and fetch the results
+        # cur_n = conn.cursor()
+        # cur_n.execute(select_energy_n)
+        # energy_n = cur_n.fetchall()
+
+        # cur_r = conn.cursor()
+        # cur_r.execute(select_energy_r)
+        # energy_r = cur_r.fetchall()
+
+        cur_a = conn.cursor()
+        cur_a.execute(select_energy_a)
+        energy_a = cur_a.fetchall()
+
+        
+        # def json_serial(obj):
+        #     """JSON serializer for objects not serializable by default json"""
+
+        #     if isinstance(obj, (datetime, time)):
+        #         return obj.isoformat()
+        #     raise TypeError ("Type %s not serializable" % type(obj))
+
+        # Format Energy consumption
+        # like {"energy":{"agent":[{"time":"06:00"{"batt_ene":0.256,"ev_ene": 0.351,"hv_ene":0.110,"tot_ene":xx},
+        #               {"time":"06:05"{"es_ene":0.356,"ev_ene": 0.0,"hv_ene":0.110,"tot_ene":xx},...}],
+        #               {"rule": [...], "naive":[...]}}
+        
+        # time_n = [i[0] for i in energy_n]
+        # batt_ene_n = [i[1] for i in energy_n]
+        # ev_ene_n = [i[2] for i in energy_n]
+        # hv_ene_n = [i[3] for i in energy_n]
+        # tot_ene_n = [i[1]+i[2]+i[3] for i in energy_n]
+
+        # keys_n = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        # items_n = [dict(zip(keys_n, [t, s, v, h, c])) for t, s, v, h, c in zip(time_n, batt_ene_n, ev_ene_n , hv_ene_n, tot_ene_n)]
+
+        # time_r = [i[0] for i in energy_r]
+        # batt_ene_r = [i[1] for i in energy_r]
+        # ev_ene_r = [i[2] for i in energy_r]
+        # hv_ene_r = [i[3] for i in energy_r]
+        # tot_ene_r = [i[1]+i[2]+i[3] for i in energy_r]
+
+        # keys_r = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        # items_r = [dict(zip(keys_r, [t, s, v, h, c])) for t, s, v, h, c in zip(time_r, batt_ene_r, ev_ene_r , hv_ene_r, tot_ene_r)]
+
+        time_a = [i[0] for i in energy_a]
+        batt_ene_a = [i[1] for i in energy_a]
+        ev_ene_a = [i[2] for i in energy_a]
+        hv_ene_a = [i[3] for i in energy_a]
+        tot_ene_a = [i[1]+i[2]+i[3] for i in energy_a]
+        grid_a = [i[4] for i in energy_a]
+        solar_a = [i[5] for i in energy_a]
+        batt_a = [i[6] for i in energy_a]
+        tot_supp_a = [i[4]+i[5]+i[6] for i in energy_a]
+
+        keys_a = ["time","batt_ene","ev_ene","hv_ene","tot_ene","grid_supp","solar_supp","batt_supp","tot_supp"]
+        items_a = [dict(zip(keys_a, [t, s, v, h, c, gr, so, bt, su])) for t, s, v, h, c, gr, so, bt, su in \
+            zip(time_a, batt_ene_a, ev_ene_a , hv_ene_a, tot_ene_a, grid_a, solar_a, batt_a, tot_supp_a)]
+        
+        #output = {"energy": json.dumps(energy, default=json_serial)}
+
+    elif interval == "hour":
+        # Execute query depending on source
+        
+        # Execute the query and fetch the energy consumption
+        # select_energy_n = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
+        #         sum(ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+        #         sum(oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+        #         FROM result WHERE scenario_id = '{scenario}' and source = 'naive' and run_id in (6,7) \
+        #         group by extract(hour from time)"
+        
+        # select_energy_r = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
+        #         sum(ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+        #         sum(oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv \
+        #         FROM result WHERE scenario_id = '{scenario}' and source = 'rule' and run_id in (6,7) \
+        #         group by extract(hour from time)"
+        
+        select_energy_a = f"SELECT  extract(hour from time) as time, sum (es_solar_power_consumed + es_grid_power_consumed) as batt, \
+                sum(ev_solar_power_consumed + ev_grid_power_consumed + ev_es_power_consumed) as ev, \
+                sum(oth_dev_solar_power_consumed + oth_dev_es_power_consumed + oth_dev_grid_power_consumed) as hv, \
+                -sum(48 - oth_dev_post_grid_power_available) as grid, \
+                -sum(solar_actionable_power - oth_dev_post_solar_power_available) as solar,   \
+                -sum(es_post_es_power_available - oth_dev_post_es_power_available) as batt    \
+                FROM result WHERE run_id = '{run_id}' \
+                group by extract(hour from time)"
+        
+        # Execute the query and fetch the results
+        # cur_n = conn.cursor()
+        # cur_n.execute(select_energy_n)
+        # energy_n = cur_n.fetchall()
+
+        # cur_r = conn.cursor()
+        # cur_r.execute(select_energy_r)
+        # energy_r = cur_r.fetchall()
+
+        cur_a = conn.cursor()
+        cur_a.execute(select_energy_a)
+        energy_a = cur_a.fetchall()
+
+        
+        # def json_serial(obj):
+        #     """JSON serializer for objects not serializable by default json"""
+
+        #     if isinstance(obj, (datetime, time)):
+        #         return obj.isoformat()
+        #     raise TypeError ("Type %s not serializable" % type(obj))
+
+        # Format Energy consumption
+        # like {"energy":{"agent":[{"time":"06:00"{"batt_ene":0.256,"ev_ene": 0.351,"hv_ene":0.110,"tot_ene":xx},
+        #               {"time":"06:05"{"es_ene":0.356,"ev_ene": 0.0,"hv_ene":0.110,"tot_ene":xx},...}],
+        #               {"rule": [...], "naive":[...]}}
+        
+        # time_n = [i[0] for i in energy_n]
+        # batt_ene_n = [i[1] for i in energy_n]
+        # ev_ene_n = [i[2] for i in energy_n]
+        # hv_ene_n = [i[3] for i in energy_n]
+        # tot_ene_n = [i[1]+i[2]+i[3] for i in energy_n]
+
+        # keys_n = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        # items_n = [dict(zip(keys_n, [t, s, v, h, c])) for t, s, v, h, c in zip(time_n, batt_ene_n, ev_ene_n , hv_ene_n, tot_ene_n)]
+
+        # time_r = [i[0] for i in energy_r]
+        # batt_ene_r = [i[1] for i in energy_r]
+        # ev_ene_r = [i[2] for i in energy_r]
+        # hv_ene_r = [i[3] for i in energy_r]
+        # tot_ene_r = [i[1]+i[2]+i[3] for i in energy_r]
+
+        # keys_r = ["time","batt_ene","ev_ene","hv_ene","tot_ene"]
+        # items_r = [dict(zip(keys_r, [t, s, v, h, c])) for t, s, v, h, c in zip(time_r, batt_ene_r, ev_ene_r , hv_ene_r, tot_ene_r)]
+
+        time_a = [i[0] for i in energy_a]
+        batt_ene_a = [i[1] for i in energy_a]
+        ev_ene_a = [i[2] for i in energy_a]
+        hv_ene_a = [i[3] for i in energy_a]
+        tot_ene_a = [i[1]+i[2]+i[3] for i in energy_a]
+        grid_a = [i[4] for i in energy_a]
+        solar_a = [i[5] for i in energy_a]
+        batt_a = [i[6] for i in energy_a]
+        tot_supp_a = [i[4]+i[5]+i[6] for i in energy_a]
+
+        keys_a = ["time","batt_ene","ev_ene","hv_ene","tot_ene","grid_supp","solar_supp","batt_supp","tot_supp"]
+        items_a = [dict(zip(keys_a, [t, s, v, h, c, gr, so, bt, su])) for t, s, v, h, c, gr, so, bt, su in \
+            zip(time_a, batt_ene_a, ev_ene_a , hv_ene_a, tot_ene_a, grid_a, solar_a, batt_a, tot_supp_a)]    
+        #output = {"energy": json.dumps(energy, default=json_serial)}
+    
+    # Format the results and return them through the API
+    else:
+            raise HTTPException (422, "interval not recognized")
+
+    return {"energy_consumption": {"agent":items_a}}
