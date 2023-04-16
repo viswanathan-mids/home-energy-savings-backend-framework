@@ -13,7 +13,7 @@ import psycopg2
 import json
 import csv
 
-origins = ["https://hes-ui-ymexo7.flutterflow.app",
+origins = ["https://hes-rl-agent.flutterflow.app",
 ]
 
 middleware = [
