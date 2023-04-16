@@ -33,7 +33,6 @@ middleware = [
 #password = os.environ.get('DB_PASSWORD')
 
 
-
 # Connect to the DB
 conn = psycopg2.connect(
     host="hes-db.cuojxnjfrbc7.us-east-1.rds.amazonaws.com",
@@ -298,13 +297,27 @@ async def results(input : result_dict):
 @app.get("/costs")
 async def get_costs(scenario : str, interval : str):
     
-    scenario = int(scenario)
+    scenario_i = int(scenario)
+    
+    # Map UI options to trained scenarios
+    
+    if scenario_i == 2:
+        scenario_o = 18
+    elif scenario_i == 3:
+        scenario_o = 23
+    elif scenario_i == 4:
+        scenario_o = 20
+    elif scenario_i == 1:
+        scenario_o = 1
+    else:
+        scenario_o = 1
+    
     # Select max run_id for the scenario
-    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' and source = 'agent'"
+    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario_o}' and source = 'agent'"
 
-    select_runid_r = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' and source = 'rule'"
+    select_runid_r = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario_o}' and source = 'rule'"
 
-    select_runid_n = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' and source = 'naive'"
+    select_runid_n = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario_o}' and source = 'naive'"
     
     # Execute the query and fetch the results
     cur1 = conn.cursor()
@@ -318,6 +331,8 @@ async def get_costs(scenario : str, interval : str):
     curn = conn.cursor()
     curn.execute(select_runid_n)
     run_id_n = curn.fetchone()[0]
+
+    run_id_n = run_id_r
 
     # Cost grouping based on interval request
 
@@ -473,7 +488,7 @@ async def get_energy(scenario : str, interval : str):
     
     scenario = int(scenario)
     # Select max run_id for the scenario
-    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' "
+    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' and source = 'agent'"
     
     # Execute the query and fetch the results
     cur1 = conn.cursor()
@@ -638,13 +653,28 @@ async def get_energy(scenario : str, interval : str):
 
     return {"energy_consumption": {"agent":items_a, "naive":items_n, "rule":items_r }}
 
+
 # get energy consumption
 @app.get("/energy")
 async def get_energy(scenario : str, interval : str):
     
-    scenario = int(scenario)
+    scenario_i = int(scenario)
+
+        # Map UI options to trained scenarios
+    
+    if scenario_i == 2:
+        scenario_o = 18
+    elif scenario_i == 3:
+        scenario_o = 23
+    elif scenario_i == 4:
+        scenario_o = 20
+    elif scenario_i == 1:
+        scenario_o = 1
+    else:
+        scenario_o = 1
+
     # Select max run_id for the scenario
-    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario}' and source = 'agent'"
+    select_runid = f"SELECT MAX(run_id) FROM result WHERE scenario_id = '{scenario_o}' and source = 'agent'"
     
     # Execute the query and fetch the results
     cur1 = conn.cursor()
